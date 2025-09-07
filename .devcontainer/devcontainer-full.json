@@ -1,0 +1,64 @@
+{
+  "name": "Solana 限价订单后端开发环境",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "dev",
+  "workspaceFolder": "/workspaces/solana-mvp-exchange",
+  
+  "postCreateCommand": "timeout 300 bash scripts/dev-setup.sh || echo '⚠️  设置脚本超时，但环境可能仍可用'",
+  "postStartCommand": "echo '🚀 开发环境已启动'",
+  
+  "forwardPorts": [8080, 8081, 5432, 6379, 8082, 8083, 40000],
+  "portsAttributes": {
+    "8080": {"label": "API 服务", "onAutoForward": "notify"},
+    "8081": {"label": "WebSocket 价格服务", "onAutoForward": "notify"},
+    "5432": {"label": "PostgreSQL", "onAutoForward": "silent"},
+    "6379": {"label": "Redis", "onAutoForward": "silent"},
+    "8082": {"label": "Redis Commander", "onAutoForward": "silent"},
+    "8083": {"label": "Adminer", "onAutoForward": "silent"},
+    "40000": {"label": "Go 调试器", "onAutoForward": "silent"}
+  },
+  
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "go.toolsManagement.checkForUpdates": "local",
+        "go.useLanguageServer": true,
+        "go.gopath": "/go",
+        "go.goroot": "/usr/local/go",
+        "go.formatTool": "goimports",
+        "editor.formatOnSave": true,
+        "editor.tabSize": 4,
+        "editor.insertSpaces": false,
+        "files.eol": "\\n"
+      },
+      "extensions": [
+        "golang.Go",
+        "ms-azuretools.vscode-docker",
+        "eamodio.gitlens",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+        "cweijan.vscode-redis-client",
+        "humao.rest-client",
+        "usernamehw.errorlens",
+        "mikestead.dotenv"
+      ]
+    }
+  },
+  
+  "remoteUser": "root",
+  "containerEnv": {
+    "GOPATH": "/go",
+    "GOROOT": "/usr/local/go",
+    "PATH": "/usr/local/go/bin:/go/bin:${PATH}",
+    "CGO_ENABLED": "0",
+    "GOOS": "linux"
+  },
+  
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": false,
+      "username": "root",
+      "upgradePackages": false
+    }
+  }
+}

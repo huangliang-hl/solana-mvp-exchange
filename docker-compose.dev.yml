@@ -1,0 +1,134 @@
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: solana-postgres
+    environment:
+      POSTGRES_DB: solana_limit_order
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/0001_init.sql:/docker-entrypoint-initdb.d/0001_init.sql
+      - ./migrations/0003_add_deleted_at_to_users.sql:/docker-entrypoint-initdb.d/0003_add_deleted_at_to_users.sql
+      - ./migrations/0004_add_error_message_to_orders.sql:/docker-entrypoint-initdb.d/04_add_error_message.sql
+      - ./migrations/0005_add_missing_order_fields.sql:/docker-entrypoint-initdb.d/05_add_missing_fields.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis 缓存和队列
+  redis:
+    image: redis:7-alpine
+    container_name: solana-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # API 服务 - 开发模式（挂载源代码）
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: dev
+    container_name: solana-api-dev
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_URL=postgres://postgres:password@postgres:5432/solana_limit_order?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - RPC_URL=https://api.devnet.solana.com
+      - JUPITER_ENDPOINT=https://quote-api.jup.ag/v6
+      - API_BIND=0.0.0.0:8080
+      - MODE=dev
+      - LOG_LEVEL=debug
+      - API_KEYS=test-key-1,demo-key-2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - .:/app                    # 挂载整个项目目录
+      - ./logs:/app/logs          # 挂载日志目录
+      - go-mod-cache:/go/pkg/mod  # 挂载Go模块缓存
+    working_dir: /app
+    command: ["go", "run", "./cmd/api/main.go"]
+
+  # 价格服务 - 开发模式（挂载源代码）
+  price:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: dev
+    container_name: solana-price-dev
+    ports:
+      - "8081:8081"
+    environment:
+      - DB_URL=postgres://postgres:password@postgres:5432/solana_limit_order?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - PRICE_WS_BIND=0.0.0.0:8081
+      - MODE=dev
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - .:/app                    # 挂载整个项目目录
+      - ./logs:/app/logs          # 挂载日志目录
+      - go-mod-cache:/go/pkg/mod  # 挂载Go模块缓存
+    working_dir: /app
+    command: ["go", "run", "./cmd/price/main.go"]
+
+  # 执行器服务 - 开发模式（挂载源代码）
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: dev
+    container_name: solana-worker-dev
+    environment:
+      - DB_URL=postgres://postgres:password@postgres:5432/solana_limit_order?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - RPC_URL=https://api.devnet.solana.com
+      - JUPITER_ENDPOINT=https://quote-api.jup.ag/v6
+      - JUPITER_MOCK_ENABLED=true
+      - JUPITER_MOCK_SUCCESS_RATE=1.0
+      - JUPITER_MOCK_LATENCY_MS=100
+      - JUPITER_MOCK_MIN_SLIPPAGE=0.1
+      - JUPITER_MOCK_MAX_SLIPPAGE=1.0
+      - PRIVATE_KEY=mock_private_key_for_development
+      - MODE=dev
+      - LOG_LEVEL=debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - .:/app                    # 挂载整个项目目录
+      - ./logs:/app/logs          # 挂载日志目录
+      - go-mod-cache:/go/pkg/mod  # 挂载Go模块缓存
+    working_dir: /app
+    command: ["go", "run", "./cmd/worker/main.go"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  go-mod-cache:                 # Go模块缓存卷

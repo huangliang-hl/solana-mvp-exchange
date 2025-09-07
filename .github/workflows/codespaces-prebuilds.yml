@@ -1,0 +1,149 @@
+name: Codespaces 预构建
+
+# 当 devcontainer 配置变更时触发预构建
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - '.devcontainer/**'
+      - '.github/codespaces/**'
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
+      - 'go.mod'
+      - 'go.sum'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - '.devcontainer/**'
+      - '.github/codespaces/**'
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  # 验证 devcontainer 配置
+  validate-devcontainer:
+    runs-on: ubuntu-latest
+    name: 验证 DevContainer 配置
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 验证 devcontainer.json 语法
+      run: |
+        echo "🔍 验证 .devcontainer/devcontainer.json"
+        if ! jq empty .devcontainer/devcontainer.json; then
+          echo "❌ .devcontainer/devcontainer.json 语法错误"
+          exit 1
+        fi
+        echo "✅ .devcontainer/devcontainer.json 语法正确"
+        
+        echo "🔍 验证 .github/codespaces/devcontainer.json"
+        if ! jq empty .github/codespaces/devcontainer.json; then
+          echo "❌ .github/codespaces/devcontainer.json 语法错误"
+          exit 1
+        fi
+        echo "✅ .github/codespaces/devcontainer.json 语法正确"
+
+    - name: 验证 Docker Compose 配置
+      run: |
+        echo "🔍 验证 docker-compose 配置"
+        if ! docker-compose -f .devcontainer/docker-compose.yml config > /dev/null; then
+          echo "❌ docker-compose.yml 配置错误"
+          exit 1
+        fi
+        echo "✅ docker-compose.yml 配置正确"
+
+    - name: 检查必要文件
+      run: |
+        echo "🔍 检查必要的配置文件"
+        files=(
+          ".devcontainer/devcontainer.json"
+          ".devcontainer/docker-compose.yml" 
+          ".devcontainer/Dockerfile"
+          ".github/codespaces/devcontainer.json"
+          "scripts/dev-setup.sh"
+          ".env.example"
+        )
+        
+        for file in "${files[@]}"; do
+          if [ ! -f "$file" ]; then
+            echo "❌ 缺少必要文件: $file"
+            exit 1
+          fi
+          echo "✅ 文件存在: $file"
+        done
+
+  # 测试容器构建
+  test-container-build:
+    runs-on: ubuntu-latest
+    name: 测试容器构建
+    needs: validate-devcontainer
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置 Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: 构建开发容器
+      run: |
+        echo "🏗️ 构建开发容器镜像"
+        docker build -f .devcontainer/Dockerfile -t solana-devcontainer .
+        echo "✅ 开发容器构建成功"
+
+    - name: 测试容器基本功能
+      run: |
+        echo "🧪 测试容器基本功能"
+        
+        # 测试 Go 环境
+        docker run --rm solana-devcontainer go version
+        
+        # 测试开发工具
+        docker run --rm solana-devcontainer which dlv
+        docker run --rm solana-devcontainer which golangci-lint
+        docker run --rm solana-devcontainer which air
+        
+        echo "✅ 容器基本功能测试通过"
+
+  # 生成预构建摘要
+  prebuild-summary:
+    runs-on: ubuntu-latest
+    name: 预构建摘要
+    needs: [validate-devcontainer, test-container-build]
+    if: always()
+    
+    steps:
+    - name: 生成摘要
+      run: |
+        echo "## 🚀 Codespaces 预构建摘要" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 验证结果" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ needs.validate-devcontainer.result }}" == "success" ]; then
+          echo "- ✅ DevContainer 配置验证通过" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- ❌ DevContainer 配置验证失败" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ needs.test-container-build.result }}" == "success" ]; then
+          echo "- ✅ 容器构建测试通过" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- ❌ 容器构建测试失败" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 配置文件状态" >> $GITHUB_STEP_SUMMARY
+        echo "- 📁 `.devcontainer/devcontainer.json` - 本地开发配置" >> $GITHUB_STEP_SUMMARY
+        echo "- 📁 `.github/codespaces/devcontainer.json` - Codespaces 专用配置" >> $GITHUB_STEP_SUMMARY
+        echo "- 🐳 `.devcontainer/docker-compose.yml` - 服务编排配置" >> $GITHUB_STEP_SUMMARY
+        echo "- 🛠️ `scripts/dev-setup.sh` - 环境初始化脚本" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📋 使用说明" >> $GITHUB_STEP_SUMMARY
+        echo "1. 在 GitHub 仓库页面点击 **Code** > **Codespaces** > **Create codespace**" >> $GITHUB_STEP_SUMMARY
+        echo "2. 等待容器构建和环境初始化完成" >> $GITHUB_STEP_SUMMARY
+        echo "3. 使用内置别名快速开发: \`api\`, \`worker\`, \`price\`, \`test-all\`" >> $GITHUB_STEP_SUMMARY
+        echo "4. 访问服务: API(8080), WebSocket(8081), Redis管理(8082), 数据库管理(8083)" >> $GITHUB_STEP_SUMMARY

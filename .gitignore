@@ -1,0 +1,67 @@
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+.env.prod
+
+# 构建输出
+bin/
+tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 测试和覆盖率
+*.out
+coverage.txt
+coverage.html
+
+# 日志文件
+logs/
+*.log
+
+# IDE 和编辑器
+.vscode/settings.json.bak
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 依赖和缓存
+vendor/
+node_modules/
+
+# 开发容器临时文件
+.devcontainer/.env
+.devcontainer/tmp/
+
+# Air 热重载
+.air.toml
+.air.toml.bak
+build-errors.log
+
+# 数据库备份
+*.sql.bak
+*.dump
+
+# 私钥和密钥
+*.key
+*.pem
+*.p12
+private_keys/
+
+# 临时文件
+*.tmp
+*.temp
+*.bak

@@ -1,0 +1,131 @@
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: solana-postgres-prod
+    environment:
+      POSTGRES_DB: solana_limit_order
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in production}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./migrations/0001_init.sql:/docker-entrypoint-initdb.d/0001_init.sql
+      - ./migrations/0003_add_deleted_at_to_users.sql:/docker-entrypoint-initdb.d/0003_add_deleted_at_to_users.sql
+      - ./migrations/0004_add_error_message_to_orders.sql:/docker-entrypoint-initdb.d/04_add_error_message.sql
+      - ./migrations/0005_add_missing_order_fields.sql:/docker-entrypoint-initdb.d/05_add_missing_fields.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - solana-network
+
+  # Redis 缓存和队列
+  redis:
+    image: redis:7-alpine
+    container_name: solana-redis-prod
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required in production}
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - solana-network
+
+  # API 服务
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: solana-api-prod
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      - DB_URL=postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/solana_limit_order?sslmode=disable
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - RPC_URL=${RPC_URL:-https://api.mainnet-beta.solana.com}
+      - JUPITER_ENDPOINT=${JUPITER_ENDPOINT:-https://quote-api.jup.ag/v6}
+      - PRIVATE_KEY=${PRIVATE_KEY:?PRIVATE_KEY is required in production}
+      - API_BIND=0.0.0.0:8080
+      - MODE=prod
+      - LOG_LEVEL=${LOG_LEVEL:-warn}
+      - API_KEYS=${API_KEYS:?API_KEYS is required in production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - solana-network
+
+  # 价格服务
+  price:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: price
+    container_name: solana-price-prod
+    ports:
+      - "${PRICE_PORT:-8081}:8081"
+    environment:
+      - DB_URL=postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/solana_limit_order?sslmode=disable
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - PRICE_WS_BIND=0.0.0.0:8081
+      - MODE=prod
+      - LOG_LEVEL=${LOG_LEVEL:-warn}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - solana-network
+
+  # 执行器服务
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    container_name: solana-worker-prod
+    environment:
+      - DB_URL=postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/solana_limit_order?sslmode=disable
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - RPC_URL=${RPC_URL:-https://api.mainnet-beta.solana.com}
+      - JUPITER_ENDPOINT=${JUPITER_ENDPOINT:-https://quote-api.jup.ag/v6}
+      - JUPITER_MOCK_ENABLED=${JUPITER_MOCK_ENABLED:-false}
+      - PRIVATE_KEY=${PRIVATE_KEY:?PRIVATE_KEY is required in production}
+      - MODE=prod
+      - LOG_LEVEL=${LOG_LEVEL:-warn}
+      - WORKER_COUNT=${WORKER_COUNT:-5}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - solana-network
+
+networks:
+  solana-network:
+    driver: bridge
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:

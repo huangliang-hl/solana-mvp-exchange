@@ -1,0 +1,67 @@
+{
+  "name": "Solana Exchange (Codespaces 优化版)",
+  "image": "golang:1.23-bullseye",
+  "workspaceFolder": "/workspaces/solana-mvp-exchange",
+  
+  // Codespaces 优化的启动配置
+  "postCreateCommand": "bash scripts/codespaces-setup.sh",
+  "postStartCommand": "echo '🌐 Codespaces 环境已启动'",
+  
+  // 端口转发
+  "forwardPorts": [8080, 8081, 5432, 6379, 8082, 8083],
+  "portsAttributes": {
+    "8080": {"label": "API 服务", "onAutoForward": "openBrowser"},
+    "8081": {"label": "WebSocket 价格服务", "onAutoForward": "notify"},
+    "5432": {"label": "PostgreSQL", "onAutoForward": "silent"},
+    "6379": {"label": "Redis", "onAutoForward": "silent"},
+    "8082": {"label": "Redis Commander", "onAutoForward": "silent"},
+    "8083": {"label": "Adminer", "onAutoForward": "silent"}
+  },
+  
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "go.toolsManagement.checkForUpdates": "local",
+        "go.useLanguageServer": true,
+        "go.gopath": "/go",
+        "go.goroot": "/usr/local/go",
+        "go.formatTool": "goimports",
+        "editor.formatOnSave": true,
+        "editor.tabSize": 4,
+        "editor.insertSpaces": false,
+        "files.eol": "\\n",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        "golang.Go",
+        "ms-azuretools.vscode-docker",
+        "eamodio.gitlens",
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "humao.rest-client",
+        "usernamehw.errorlens"
+      ]
+    }
+  },
+  
+  "remoteUser": "root",
+  "containerEnv": {
+    "GOPATH": "/go",
+    "GOROOT": "/usr/local/go",
+    "PATH": "/usr/local/go/bin:/go/bin:${PATH}",
+    "CGO_ENABLED": "0",
+    "GOOS": "linux",
+    "CODESPACES": "true",
+    "GITHUB_CODESPACES": "true"
+  },
+  
+  // Codespaces 优化的 features
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": false,
+      "username": "root",
+      "upgradePackages": false
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  }
+}

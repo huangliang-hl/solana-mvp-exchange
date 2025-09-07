@@ -1,0 +1,33 @@
+# 开发环境 Dockerfile - 用于热重载开发
+# 使用方式：
+# docker build -f Dockerfile.dev --target dev -t solana-exchange-dev .
+
+# 开发环境基础镜像
+FROM golang:1.23-alpine AS dev
+
+# 安装开发需要的工具
+RUN apk add --no-cache \
+    git \
+    ca-certificates \
+    tzdata \
+    curl \
+    make \
+    gcc \
+    musl-dev
+
+# 设置工作目录
+WORKDIR /app
+
+# 配置Go环境
+ENV GO111MODULE=on
+ENV GOPROXY=https://goproxy.cn,direct
+ENV CGO_ENABLED=1
+
+# 创建日志目录
+RUN mkdir -p /app/logs
+
+# 暴露端口（根据服务不同会被覆盖）
+EXPOSE 8080 8081
+
+# 默认命令（会被 docker-compose.dev.yml 中的 command 覆盖）
+CMD ["go", "version"]

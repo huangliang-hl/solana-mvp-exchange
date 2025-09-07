@@ -1,0 +1,74 @@
+# 测试环境 Docker Compose 配置
+# 用于运行完整的集成测试
+
+services:
+  # PostgreSQL 测试数据库
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: solana-postgres-test
+    environment:
+      POSTGRES_DB: solana_limit_order_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"  # 使用不同端口避免冲突
+    volumes:
+      - ./migrations/0001_init.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./migrations/0003_add_deleted_at_to_users.sql:/docker-entrypoint-initdb.d/03_add_deleted_at.sql
+      - ./migrations/0004_add_error_message_to_orders.sql:/docker-entrypoint-initdb.d/04_add_error_message.sql
+      - ./migrations/0005_add_missing_order_fields.sql:/docker-entrypoint-initdb.d/05_add_missing_fields.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 测试实例
+  redis-test:
+    image: redis:7-alpine
+    container_name: solana-redis-test
+    ports:
+      - "6380:6379"  # 使用不同端口避免冲突
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 集成测试运行器
+  integration-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    container_name: solana-integration-tests
+    environment:
+      - DB_URL=postgres://postgres:password@postgres-test:5432/solana_limit_order_test?sslmode=disable
+      - REDIS_URL=redis://redis-test:6379/0
+      - RPC_URL=https://api.devnet.solana.com
+      - JUPITER_ENDPOINT=https://quote-api.jup.ag/v6
+      - MODE=test
+      - LOG_LEVEL=info
+      - API_KEYS=test-key-1,test-key-2
+      - PRIVATE_KEY=test_private_key_for_development_only
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/bin  # 排除本地 bin 目录
+    working_dir: /app
+    command: >
+      sh -c "
+        echo '等待服务就绪...' &&
+        sleep 5 &&
+        echo '运行完整集成测试...' &&
+        go test -v ./internal/integration/ -timeout=300s
+      "
+
+volumes:
+  postgres_test_data:
+  redis_test_data:

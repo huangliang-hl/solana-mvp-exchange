@@ -1,0 +1,49 @@
+{
+  "name": "Solana Exchange (简化版)",
+  "image": "golang:1.23-bullseye",
+  "workspaceFolder": "/workspaces/solana-mvp-exchange",
+  
+  "postCreateCommand": "bash -c 'apt-get update && apt-get install -y postgresql-client redis-tools git && echo \"简化环境设置完成\"'",
+  "postStartCommand": "echo '🚀 简化开发环境已启动'",
+  
+  "forwardPorts": [8080, 8081, 5432, 6379],
+  "portsAttributes": {
+    "8080": {"label": "API 服务", "onAutoForward": "notify"},
+    "8081": {"label": "WebSocket 价格服务", "onAutoForward": "notify"},
+    "5432": {"label": "PostgreSQL", "onAutoForward": "silent"},
+    "6379": {"label": "Redis", "onAutoForward": "silent"}
+  },
+  
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "go.toolsManagement.checkForUpdates": "local",
+        "go.useLanguageServer": true,
+        "go.gopath": "/go",
+        "go.goroot": "/usr/local/go",
+        "editor.formatOnSave": true
+      },
+      "extensions": [
+        "golang.Go",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  },
+  
+  "remoteUser": "root",
+  "containerEnv": {
+    "GOPATH": "/go",
+    "GOROOT": "/usr/local/go",
+    "PATH": "/usr/local/go/bin:/go/bin:${PATH}",
+    "CGO_ENABLED": "0",
+    "GOOS": "linux"
+  },
+  
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": false,
+      "username": "root",
+      "upgradePackages": false
+    }
+  }
+}

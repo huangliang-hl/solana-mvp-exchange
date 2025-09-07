@@ -1,0 +1,151 @@
+version: '3.3'
+
+services:
+  # 开发环境容器
+  dev:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    container_name: solana-devcontainer
+    volumes:
+      # 挂载整个项目到工作目录（带仓库名）
+      - ..:/workspaces/solana-mvp-exchange:cached
+      # 挂载 Go 模块缓存
+      - go-modules:/go/pkg/mod
+      # 挂载 Go 构建缓存
+      - go-cache:/root/.cache/go-build
+      # 条件挂载 Git 配置（Codespaces 兼容）
+      - type: bind
+        source: ${HOME:-/root}/.gitconfig
+        target: /root/.gitconfig
+        read_only: true
+        bind:
+          create_host_path: true
+      # 条件挂载 SSH 密钥（Codespaces 兼容）
+      - type: bind
+        source: ${HOME:-/root}/.ssh
+        target: /root/.ssh
+        read_only: true
+        bind:
+          create_host_path: true
+    working_dir: /workspaces/solana-mvp-exchange
+    environment:
+      # Go 环境变量
+      - GOPATH=/go
+      - GOROOT=/usr/local/go
+      - CGO_ENABLED=0
+      - GOOS=linux
+      # 项目环境变量
+      - DB_URL=postgres://postgres:password@postgres:5432/solana_limit_order?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - RPC_URL=https://api.devnet.solana.com
+      - JUPITER_ENDPOINT=https://quote-api.jup.ag/v6
+      - JUPITER_MOCK_ENABLED=true
+      - JUPITER_MOCK_SUCCESS_RATE=0.95
+      - JUPITER_MOCK_LATENCY_MS=200
+      - API_BIND=0.0.0.0:8080
+      - PRICE_WS_BIND=0.0.0.0:8081
+      - MODE=dev
+      - LOG_LEVEL=debug
+      - API_KEYS=dev-key-1,dev-key-2
+    ports:
+      - "8080:8080" # API 服务
+      - "8081:8081" # WebSocket 价格服务
+      - "40000:40000" # Go delve 调试器
+    depends_on:
+      - postgres
+      - redis
+    # 保持容器运行
+    command: tail -f /dev/null
+    networks:
+      - solana-dev
+
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: solana-dev-postgres
+    environment:
+      POSTGRES_DB: solana_limit_order
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../migrations/0001_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ../migrations/0002_test_init.sql:/docker-entrypoint-initdb.d/02_test_init.sql:ro
+      - ../migrations/0003_add_deleted_at_to_users.sql:/docker-entrypoint-initdb.d/03_add_deleted_at.sql:ro
+      - ../migrations/0004_add_error_message_to_orders.sql:/docker-entrypoint-initdb.d/04_add_error_message.sql:ro
+      - ../migrations/0005_add_missing_order_fields.sql:/docker-entrypoint-initdb.d/05_add_missing_fields.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d solana_limit_order" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - solana-dev
+
+  # Redis 缓存和队列
+  redis:
+    image: redis:7-alpine
+    container_name: solana-dev-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ""
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - solana-dev
+
+  # Redis Commander - Redis 管理界面
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: solana-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8082:8081"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - solana-dev
+
+  # Adminer - 数据库管理界面
+  adminer:
+    image: adminer:latest
+    container_name: solana-adminer
+    ports:
+      - "8083:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - solana-dev
+
+# 网络配置
+networks:
+  solana-dev:
+    driver: bridge
+
+# 卷配置
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  go-modules:
+    driver: local
+  go-cache:
+    driver: local
+
